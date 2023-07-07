@@ -69,14 +69,26 @@
 }
 
   </style>
+  <div style="position: absolute; top: 15rem; left: 15rem;">
+    <a href="/" style="display: inline-block; padding: 4px;">Back</a>
+  </div>
+  <div style="position: absolute; top: 15rem; right: 15rem;">
+    <a href="/subscription/plans/new" style="display: inline-block; padding: 4px;">Create</a>
+  </div>
   <div class="container">
-	
-    <div class="table">
+    
+    <div class="table" style="position: relative;">
+      <div style="position: absolute; left: 45%; bottom: 100%;">
+        <h1>Plans</h1>
+      </div>
       <div class="table-header">
         <div class="header__item"><a id="name" class="filter__link" href="#">-</a></div>
         <div class="header__item"><a id="wins" class="filter__link filter__link--number" href="#">Plan's name</a></div>
         <div class="header__item"><a id="draws" class="filter__link filter__link--number" href="#">Price</a></div>
         <div class="header__item"><a id="losses" class="filter__link filter__link--number" href="#">Currency</a></div>
+        <div class="header__item"><a id="total" class="filter__link filter__link--number" href="#">Status</a></div>
+        <div class="header__item"><a id="total" class="filter__link filter__link--number" href="#">Tenure type</a></div>
+        <div class="header__item"><a id="total" class="filter__link filter__link--number" href="#">Duration</a></div>
         <div class="header__item"><a id="total" class="filter__link filter__link--number" href="#">Action</a></div>
       </div>
       
@@ -87,6 +99,9 @@
           <div class="table-data"><%= plan.title %></div>
           <div class="table-data"><%= plan.price %></div>
           <div class="table-data"><%= plan.currency %></div>
+          <div class="table-data"><%= plan.status %></div>
+          <div class="table-data"><%= plan.tenureType %></div>
+          <div class="table-data"><%= `${plan.durationAmount} ${plan.durationUnit}` %></div>
           <div class="table-data"><a href="http://127.0.0.1:3000/subscription/checkout?planId=<%= plan.paypalPlanId%>"><button>Checkout</button></a></div>
         </div>
         <%})%>

@@ -1,0 +1,145 @@
+<div style="position: absolute; top: 15rem; left: 15rem; z-index: 1000;">
+  <a href="/subscription/plans" style="display: inline-block; padding: 4px;">Back</a>
+</div>
+<style>
+  .form-container {
+    height: 100%;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+
+  form {
+    width: 100%;
+    max-width: 500px;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid #ccc;
+  }
+
+  form>label {
+    max-height: 100px;
+    padding: 0.5rem;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+  }
+
+  form input,
+  form select {
+    padding: 8px 12px;
+  }
+
+  form button {
+    padding: 8px 12px;
+    margin: 0.25rem 1.25rem;
+  }
+
+</style>
+<div class="form-container">
+  <h1>Create a plan</h1>
+  <form>
+    <label for="title">
+      Title
+      <input id="title" />
+    </label>
+    <label for="price">
+      Price
+      <input id="price" />
+    </label>
+    <label for="description">
+      Description
+      <input id="description" />
+    </label>
+    <label for="currency">
+      Currency
+      <select id="currency">
+        <% Object.entries(currencies).forEach(([key, value])=> { %>
+          <option value="<%= value %>">
+            <%= key %>
+          </option>
+          <% }) %>
+      </select>
+    </label>
+    <label for="status">
+      Status
+      <select id="status">
+        <% Object.entries(status).forEach(([key, value])=> { %>
+          <option value="<%= value %>">
+            <%= key %>
+          </option>
+          <% }) %>
+      </select>
+    </label>
+    <label for="tenure-type">
+      Tenure type
+      <select id="tenure-type">
+        <% Object.entries(tenureTypes).forEach(([key, value])=> { %>
+          <option value="<%= value %>">
+            <%= key %>
+          </option>
+          <% }) %>
+      </select>
+    </label>
+    <label for="duration-amount">
+      Duration amount
+      <input id="duration-amount" />
+    </label>
+    <label for="duration-unit">
+      Duration unit
+      <select id="duration-unit">
+        <% Object.entries(durationUnits).forEach(([key, value])=> { %>
+          <option value="<%= value %>">
+            <%= key %>
+          </option>
+          <% }) %>
+      </select>
+    </label>
+    <button type="button" onClick="createPlan()">Create</button>
+  </form>
+</div>
+
+<script>
+  function createPlan() {
+    const title = document.getElementById('title').value;
+    const price = document.getElementById('price').value;
+    const description = document.getElementById('description').value;
+    const currency = document.getElementById('currency').value;
+    const status = document.getElementById('status').value;
+    const tenureType = document.getElementById('tenure-type').value;
+    const durationAmount = document.getElementById('duration-amount').value;
+    const durationUnit = document.getElementById('duration-unit').value;
+
+    fetch('/api/v1/subscription/plans/new', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        title,
+        price,
+        description,
+        currency,
+        status,
+        tenureType,
+        durationAmount,
+        durationUnit
+      })
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          alert('Create plan successfully');
+          // window.location.href = '/subscription/plans';
+        } else {
+          alert('Create plan failed');
+        }
+      })
+      .catch(err => {
+        console.log(err);
+        alert('Create plan failed');
+      })
+  }
+</script>

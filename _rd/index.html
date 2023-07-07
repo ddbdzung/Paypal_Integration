@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PayPal SDK Python Demo</title>
+</head>
+
+<body>
+  <script data-sdk-integration-source="integrationbuilder_sc"></script>
+  <div id="paypal-button-container"></div>
+  <script
+    src="https://www.paypal.com/sdk/js?client-id=ARBtpS2cDvkGm7jBa13QeUGLm34Rkm1H1beAzdFK7-RuLcg38_89zjK9VWJ1MOfeMfCZVq4kHlm9heGs&vault=true&intent=subscription"></script>
+  <!-- <script>src="https://unpkg.com/@paypal/paypal-js@2.0.0/dist/paypal.browser.min.js"</script> -->
+  <script>
+    paypal
+      .Buttons({
+        // createOrder: async (data, actions) => {
+        //   const response = await fetch("/orders", {
+        //     method: "POST",
+        //   });
+        //   const details = await response.json();
+        //   return details.id;
+        // },
+
+        createSubscription: (data, actions) => {
+          return actions.subscription.create({
+            plan_id: "P-9UA42183LJ482280LMSDPCNI",
+            vault: true,
+          });
+        },
+
+        onApprove: async (data, actions) => {
+          console.log('onApprove', data);
+          console.log('onApprove2', actions);
+          const response = await fetch(`http://127.0.0.1:9597/orders/capture/${data.subscriptionID}`);
+          const details = await response.json();
+          // Three cases to handle:
+          //   (1) Recoverable INSTRUMENT_DECLINED -> call actions.restart()
+          //   (2) Other non-recoverable errors -> Show a failure message
+          //   (3) Successful transaction -> Show confirmation or thank you
+
+          // This example reads a v2/checkout/orders capture response, propagated from the server
+          // You could use a different API or structure for your 'orderData'
+
+          const errorDetail =
+            Array.isArray(details.details) && details.details[0];
+          if (errorDetail && errorDetail.issue === "INSTRUMENT_DECLINED") {
+            return actions.restart(); // Recoverable state, per:
+            // https://developer.paypal.com/docs/checkout/integration-features/funding-failure/
+          }
+
+          if (errorDetail) {
+            let msg = "Sorry, your transaction could not be processed.";
+            if (errorDetail.description)
+              msg += "\n\n" + errorDetail.description;
+            if (details.debug_id) msg += " (" + details.debug_id + ")";
+            return alert(msg); // Show a failure message (try to avoid alerts in production environments)
+          }
+
+          // Successful capture! For demo purposes:
+          console.log(
+            "Capture result",
+            details,
+            JSON.stringify(details, null, 2)
+          );
+          const transaction = details.purchase_units[0].payments.captures[0];
+          alert(
+            "Transaction " +
+            transaction.status +
+            ": " +
+            transaction.id +
+            "\n\nSee console for all available details"
+          );
+        },
+      })
+      .render("#paypal-button-container");
+  </script>
+</body>
+
+</html>
