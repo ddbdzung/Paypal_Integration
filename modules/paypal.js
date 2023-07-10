@@ -40,13 +40,12 @@ const _paypalPrepareCreatePlan = (planDocument) => {
   return paypalNormalizePlan
 }
 const _paypalCreatePlan = async (plan) => {
-  console.log('🚀 ~ file: paypal.js:39 ~ const_paypalCreatePlan= ~ plan:', plan)
   const paypalRequestId = () => uuid.v4()
 
   try {
     const { data } = await axios({
       url: 'https://api-m.sandbox.paypal.com/v1/billing/plans',
-      method: 'post',
+      method: 'POST',
       maxBodyLength: Infinity,
       headers: {
         'PayPal-Request-Id': paypalRequestId(),

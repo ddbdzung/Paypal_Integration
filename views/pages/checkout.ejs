@@ -7,13 +7,17 @@
 
 <script>
   paypal.Buttons({
-   createSubscription: function(data, actions) {
+    createSubscription: function (data, actions) {
      return actions.subscription.create({
       'plan_id': '<%= planId %>' // Creates the subscription
       });
     },
-    onApprove: function(data, actions) {
-      alert('You have successfully subscribed to ' + data.subscriptionID); // Optional message given to subscriber
+    onApprove: async function (data, actions) {
+      console.log('onApprove', data);
+      // const response = await fetch(`http://127.0.0.1:3000/api/v1/subscription/capture/${data.subscriptionID}`)
+      // const details = response.json();
+      // console.log('details', details)
+      alert('Done')
     }
   }).render('#paypal-button-container'); // Renders the PayPal button
 </script>
