@@ -1,6 +1,6 @@
 require('dotenv').config()
 const express = require('express')
-const { PAYPAL_CURRENCY, PAYPAL_TENURE_TYPE, PAYPAL_STATUS, PAYPAL_INTERVAL_UNIT } = require('./constants/paypal')
+const { PAYPAL_CURRENCY, PAYPAL_TENURE_TYPE, PAYPAL_STATUS, PAYPAL_INTERVAL_UNIT, PAYPAL_EVENT_SUBSCRIPTION, PAYPAL_EVENT_PLAN } = require('./constants/paypal')
 const { validate } = require('./middlewares/validate')
 const Plan = require('./models/Plan')
 const { planValidation } = require('./validations')
@@ -109,6 +109,46 @@ app.get('/api/v1/paypal/webhook/show-event/:eventId', async (req, res) => {
     }
 })
 
+app.post('/api/v1/paypal/webhook/update-event/:eventId', async (req, res) => {
+    const { eventId } = req.params
+    const { urlListener, eventTypes } = req.body
+    const url = `https://api-m.sandbox.paypal.com/v1/notifications/webhooks/${eventId}`
+    const bodyData = [
+        {
+            op: 'replace',
+            path: '/url',
+            value: urlListener,
+        },
+        {
+            op: 'replace',
+            path: '/event_types',
+            value: eventTypes,
+        }
+    ]
+    console.log('🚀 ~ file: app.js:127 ~ app.post ~ bodyData:', bodyData)
+    const configs = {
+        method: 'PATCH',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        auth: {
+            username: process.env.PAYPAL_CLIENT_ID,
+            password: process.env.PAYPAL_CLIENT_SECRET,
+        },
+    }
+    try {
+        const { data } = await axios({
+            url,
+            data: bodyData,
+            ...configs,
+        })
+
+        return res.status(200).json(data)
+    } catch (err) {
+        return res.status(500).json({ error: err.response?.data })
+    }
+})
+
 app.post('/api/v1/paypal/webhook/create-event', async (req, res) => {
     const { urlListener, eventTypes } = req.body
     const url = 'https://api-m.sandbox.paypal.com/v1/notifications/webhooks'
@@ -134,17 +174,45 @@ app.post('/api/v1/paypal/webhook/create-event', async (req, res) => {
         })
         res.json(data)
     } catch (error) {
-        console.log(error.response.data)
+        if (error.response.data?.name === 'WEBHOOK_URL_ALREADY_EXISTS') {
+            return res.status(500).json({ error: error.response.data?.message })
+        }
+
         res.status(500).json({ error })
     }
 })
-// BILLING.SUBSCRIPTION.CREATED
-app.post('/api/v1/paypal/webhook/subscription-created', async (req, res) => {
-    console.log(req.body)
+
+// const verifyWebhookSignature = (headers, body) => {
+//     const { paypalTransmissionId, paypalTransmissionTime, paypalCertUrl, paypalAuthAlgo, paypalTransmissionSig } = headers
+//     const cert = fs.readFileSync('./config/paypal-cert.pem')
+//     const verifier = crypto.createVerify('sha256')
+//     verifier.update(`${paypalTransmissionId}|${paypalTransmissionTime}|${body}`)
+//     const isVerified = verifier.verify(cert, paypalTransmissionSig, 'base64')
+//     return isVerified
+// }
+
+app.post('/api/v1/paypal/webhook/subscription', async (req, res) => {
+    const { event_type, resource, summary } = req.body
+    console.log(event_type, summary)
+
+    switch (event_type) {
+        case PAYPAL_EVENT_SUBSCRIPTION.BILLING_SUBSCRIPTION_CREATED:
+            console.log(PAYPAL_EVENT_SUBSCRIPTION.BILLING_SUBSCRIPTION_CREATED, resource.plan_id)
+            break;
+        case PAYPAL_EVENT_PLAN.BILLING_PLAN_CREATED:
+            console.log(PAYPAL_EVENT_PLAN.BILLING_PLAN_CREATED, resource.id)
+            break;
+
+        default:
+            console.log('Event type not handled')
+            console.log(PAYPAL_EVENT_PLAN.BILLING_PLAN_CREATED, null)
+            break;
+    }
+
     return res.status(201).json({
         success: true,
-        message: 'User subscribed successfully',
-        data: req.body,
+        // message: 'User subscribed successfully',
+        // data: req.body,
     })
 })
 
@@ -169,9 +237,16 @@ app.post('/api/v1/subscription/plans/new', validate(planValidation.createPlan), 
         'durationUnit',
     ])
     try {
-        const planDocument = await Plan.create(rawPlan)
+        const isPlanExists = await Plan.findOne({ title: rawPlan.title })
+        if (isPlanExists) {
+            return res.status(400).json({
+                success: false,
+                message: 'Plan already exists'
+            })
+        }
+
+        const planDocument = new Plan(rawPlan)
         const paypalPlan = await createPlan(planDocument)
-        planDocument.paypalPlanId = paypalPlan.id
         if (!paypalPlan) {
             console.error('Something went wrong with syncing plan to paypal')
 
@@ -181,6 +256,7 @@ app.post('/api/v1/subscription/plans/new', validate(planValidation.createPlan), 
             })
         }
 
+        planDocument.paypalPlanId = paypalPlan.id
         await planDocument.save()
 
         res.status(201).json({
@@ -188,7 +264,7 @@ app.post('/api/v1/subscription/plans/new', validate(planValidation.createPlan), 
             data: paypalPlan,
         })
     } catch (error) {
-        console.error(error)
+        console.error('Something went wrong with creating plan', error)
 
         res.status(500).json({
             success: false,

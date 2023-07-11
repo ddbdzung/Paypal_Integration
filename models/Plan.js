@@ -7,7 +7,8 @@ const PlanSchema = mongoose.Schema({
   },
   title: {
     type: String,
-    required: true
+    required: true,
+    index: true,
   },
   price: Number,
   description: String,

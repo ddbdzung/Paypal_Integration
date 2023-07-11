@@ -4,7 +4,6 @@ const { pick } = require('../utils/pick');
 exports.validate = (schema) => (req, res, next) => {
   const validSchema = pick(schema, ['params', 'query', 'body']);
   const object = pick(req, Object.keys(validSchema));
-  console.log('🚀 ~ file: validate.js:7 ~ object:', object)
   const { value, error } = Joi.compile(validSchema)
     .prefs({ errors: { label: 'key' }, abortEarly: false })
     .validate(object);
