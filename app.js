@@ -6,8 +6,12 @@ const Plan = require('./models/Plan')
 const { planValidation } = require('./validations')
 const { connectDb } = require('./mongoose')
 const { pick } = require('./utils/pick')
-const { createPlan } = require('./modules/paypal')
-const uuid = require('uuid');
+const {
+  createPlan,
+  createHookEvent,
+  cancelSubscription,
+} = require("./modules/paypal");
+const uuid = require("uuid");
 const axios = require("axios");
 const cookieParser = require("cookie-parser");
 
@@ -16,6 +20,9 @@ const https = require("https");
 const User = require("./models/User");
 const Bill = require("./models/Bill");
 const Membership = require("./models/Membership");
+const PaypalWebhook = require("./models/PaypalWebhook");
+const { createMembership } = require("./modules/membership");
+const { BILL_STATUS } = require("./constants/bill");
 
 const certCrt = fs.readFileSync("./config/cert.crt");
 const certKey = fs.readFileSync("./config/cert.key");
@@ -163,74 +170,170 @@ app.post("/api/v1/paypal/webhook/update-event/:eventId", async (req, res) => {
 
 app.post("/api/v1/paypal/webhook/create-event", async (req, res) => {
   const { urlListener, eventTypes } = req.body;
-  const url = "https://api-m.sandbox.paypal.com/v1/notifications/webhooks";
-  const bodyData = {
-    url: urlListener,
-    event_types: eventTypes,
-  };
-  const configs = {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    auth: {
-      username: process.env.PAYPAL_CLIENT_ID,
-      password: process.env.PAYPAL_CLIENT_SECRET,
-    },
-  };
   try {
-    const { data } = await axios({
-      url,
-      data: bodyData,
-      ...configs,
-    });
-    res.json(data);
-  } catch (error) {
-    if (error.response.data?.name === "WEBHOOK_URL_ALREADY_EXISTS") {
-      return res.status(500).json({ error: error.response.data?.message });
-    }
+    const data = await createHookEvent(urlListener, eventTypes);
 
-    res.status(500).json({ error });
+    return res.status(200).json(data);
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
-app.post(
-  "/api/v1/paypal/webhook/subscription",
-  async (req, res) => {
-    const { event_type, resource, summary } = req.body;
-    console.log(event_type, summary);
+app.get("/webhooks", authUser(), async (req, res) => {
+  const paypalWebhooks = await PaypalWebhook.find({});
+  res.render("pages/webhooks", {
+    isAuth: !!req.user,
+    paypalWebhooks,
+  });
+});
 
-    switch (event_type) {
-      case PAYPAL_EVENT_SUBSCRIPTION.BILLING_SUBSCRIPTION_CREATED:
-        console.log(
-          PAYPAL_EVENT_SUBSCRIPTION.BILLING_SUBSCRIPTION_CREATED,
-          resource.plan_id
-        );
-        break;
+app.get("/webhooks/initialize", authUser(), async (req, res) => {
+  const paypalWebhooks = await PaypalWebhook.find({});
+  let protocol = req.protocol;
+  if (protocol !== "https") {
+    // return res.status(500).json({
+    //   success: false,
+    //   message: "Please use https protocol to sign up paypal webhooks",
+    // });
+    protocol = "https";
+  }
+  const listener = `${protocol}://${req.get(
+    "host"
+  )}/api/v1/paypal/webhook/subscription`;
+  console.log("listener: ", listener);
+  if (paypalWebhooks.length === 0) {
+    const eventTypes = [
+      ...Object.values(PAYPAL_EVENT_PLAN),
+      ...Object.values(PAYPAL_EVENT_SUBSCRIPTION),
+    ].map((e) => ({ name: e }));
+    try {
+      const data = await createHookEvent(listener, eventTypes);
+      const { id, url, event_types } = data;
+      const documents = event_types.map((e) => ({
+        hookId: id,
+        type: e.name,
+        listener: url,
+      }));
 
-      case PAYPAL_EVENT_SUBSCRIPTION.BILLING_SUBSCRIPTION_ACTIVATED:
-        console.log(
-          PAYPAL_EVENT_SUBSCRIPTION.BILLING_SUBSCRIPTION_ACTIVATED,
-          resource.plan_id
-        );
-        break;
-      case PAYPAL_EVENT_PLAN.BILLING_PLAN_CREATED:
-        console.log(PAYPAL_EVENT_PLAN.BILLING_PLAN_CREATED, resource.id);
-        break;
-
-      default:
-        console.log("Event type not handled");
-        console.log(PAYPAL_EVENT_PLAN.BILLING_PLAN_CREATED, null);
-        break;
+      const savedWebhook = await PaypalWebhook.create(documents);
+      return res.status(200).json({
+        success: true,
+        data: savedWebhook,
+      });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: err.message });
     }
+  }
 
-    return res.status(201).json({
+  return res.status(204).send();
+});
+
+app.post("/api/v1/paypal/webhook/subscription", async (req, res) => {
+  const { event_type, resource, summary } = req.body;
+  if (Object.values(PAYPAL_EVENT_SUBSCRIPTION).includes(event_type)) {
+    console.log(
+      `[${event_type}] ${summary} - Plan ID: ${resource.plan_id} - Subscription ID: ${resource.id}`
+    );
+
+    if (
+      event_type === PAYPAL_EVENT_SUBSCRIPTION.BILLING_SUBSCRIPTION_ACTIVATED
+    ) {
+      const { plan_id, id, subscriber, billing_info } = resource;
+      try {
+        const pPlan = Plan.findOne({ paypalPlanId: plan_id });
+        const pBill = Bill.findOne({ paypalSubscriptionId: id });
+        const [plan, bill] = await Promise.all([pPlan, pBill]);
+        if (!bill) {
+          console.log("Can not find bill with this subscription");
+          // What to do if subscription is activated but the bill is not exist in database
+          // Can not create new bill because can not verify user create the bill if not provide
+          return res.status(200).json({
+            success: false,
+            error: "Can not find bill with this subscription",
+            metadata: {
+              plan_id,
+              subscriptionID: id,
+            },
+          });
+        }
+
+        bill.status = BILL_STATUS.PAID;
+        bill.paypalExtend = {
+          subscriber,
+          billing_info,
+        };
+        bill.paypalPlanId = plan_id;
+        const user = await User.findById(bill.owner._id);
+        const pSavedBill = bill.save();
+        const pMembership = createMembership(plan, user, bill);
+        const [savedBill, membership] = await Promise.all([
+          pSavedBill,
+          pMembership,
+        ]);
+        console.log({ savedBill, membership });
+      } catch (error) {
+        console.log(error);
+        return res.status(500).json({ success: false, error: error.message });
+      }
+    } else if (
+      event_type === PAYPAL_EVENT_SUBSCRIPTION.BILLING_SUBSCRIPTION_CANCELLED
+    ) {
+      console.log("User cancelled subscription from paypal");
+      const { plan_id, id } = resource;
+      try {
+        const bill = await Bill.findOne({ paypalSubscriptionId: id }).lean();
+        if (!bill) {
+          console.log("Can not find bill with this subscription");
+          // What to do if subscription is activated but the bill is not exist in database
+          // Can not create new bill because can not verify user create the bill if not provide
+          return res.status(200).json({
+            success: false,
+            error: "Can not find bill with this subscription",
+            metadata: {
+              plan_id,
+              subscriptionID: id,
+            },
+          });
+        }
+
+        const membership = await Membership.findOne({ bill: bill._id });
+        if (!membership) {
+          return res.status(500).json({
+            success: false,
+            error: "Can not find membership with this bill",
+          });
+        }
+
+        membership.status = "cancelled";
+        await membership.save();
+        return res.status(200).json({
+          success: true,
+          data: membership,
+        });
+      } catch (err) {
+        console.log(err);
+        return res.status(500).json({ success: false, error: err.message });
+      }
+    }
+    return res.status(200).json({
       success: true,
-      // message: 'User subscribed successfully',
-      // data: req.body,
     });
   }
-);
+
+  if (Object.values(PAYPAL_EVENT_PLAN).includes(event_type)) {
+    console.log(`[${event_type}] ${summary} - Plan ID: ${resource.id}`);
+
+    return res.status(200).json({
+      success: true,
+    });
+  }
+
+  console.log("Event type not handled");
+
+  return res.status(500).json({
+    success: true,
+  });
+});
 
 app.get("/subscription/plans/new", authUser(), async (req, res) => {
   res.render("pages/create-plan", {
@@ -310,8 +413,105 @@ app.get("/subscription/checkout", authUser(), async (req, res) => {
   });
 });
 
+app.get(
+  "/subscription/unsubscribe/:membershipId",
+  authUser(),
+  async (req, res) => {
+    const { membershipId } = req.params;
+    const { _id } = req.user;
+    try {
+      const membership = await Membership.findById(membershipId).populate([
+        "bill",
+      ]);
+      if (!membership) {
+        return res.status(404).json({
+          success: false,
+          message: "Membership not found",
+        });
+      }
+
+      if (membership.owner._id.toString() !== _id.toString()) {
+        return res.status(403).json({
+          success: false,
+          message: "You are not authorized to perform this action",
+        });
+      }
+
+      if (
+        membership.status === "inactive" ||
+        membership.status === "cancelled"
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Membership is already inactive or cancelled",
+        });
+      }
+
+      membership.status = "cancelled";
+
+      const pSavedMembership = membership.save();
+      const pCancelSubscription = cancelSubscription(
+        membership.bill.paypalSubscriptionId
+      );
+
+      const [savedMembership, _] = await Promise.all([
+        pSavedMembership,
+        pCancelSubscription,
+      ]);
+      return res.status(200).json({
+        success: true,
+        data: savedMembership,
+      });
+    } catch (err) {
+      console.log("Error when cancelling subscription", err);
+      return res.status(500).json({
+        success: false,
+        message: "Something went wrong",
+      });
+    }
+  }
+);
+
+app.post("/subscription/checkout/:planId", authUser(), async (req, res) => {
+  const { planId } = req.params;
+  const { email, _id, roles } = req.user;
+  const { subscriptionID } = req.body;
+
+  if (!planId) {
+    return res.status(400).json({
+      success: false,
+      message: "Plan ID is required",
+    });
+  }
+  const pPlan = Plan.findOne({ paypalPlanId: planId });
+  const pUser = User.findById(_id);
+  const [plan, user] = await Promise.all([pPlan, pUser]);
+  if (!plan || !user) {
+    return res.status(404).json({
+      success: false,
+      message: "Plan or user not found",
+    });
+  }
+
+  const createdBill = await Bill.create({
+    owner: user._id,
+    plan: plan._id,
+    price: plan.price,
+    currency: plan.currency,
+    status: BILL_STATUS.PENDING,
+    paypalSubscriptionId: subscriptionID,
+  });
+
+  return res.status(201).json({
+    success: true,
+    data: createdBill,
+  });
+});
+
 app.get("/bills", authUser(), async (req, res) => {
-  const bills = await Bill.find({ user: req.user._id }).populate("plan");
+  const bills = await Bill.find({ owner: req.user._id })
+    .populate("plan")
+    .lean();
   res.render("pages/bills", {
     isAuth: !!req.user,
     bills,
@@ -319,12 +519,21 @@ app.get("/bills", authUser(), async (req, res) => {
 });
 
 app.get("/memberships", authUser(), async (req, res) => {
-  const memberships = await Membership.find({ user: req.user._id }).populate(
-    "plan"
-  );
+  const memberships = await Membership.find({ owner: req.user._id })
+    .populate(["plan", "owner"])
+    .lean();
+
+  const formatMemberships = (memberships) => {
+    return memberships.map(({ start, finish, ...membership }) => ({
+      start: `${start.toLocaleDateString()} ${start.toLocaleTimeString()}`,
+      finish: `${finish.toLocaleDateString()} ${finish.toLocaleTimeString()}`,
+      ...membership,
+    }));
+  };
+
   res.render("pages/memberships", {
     isAuth: !!req.user,
-    memberships,
+    memberships: formatMemberships(memberships),
   });
 });
 

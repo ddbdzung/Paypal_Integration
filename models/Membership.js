@@ -8,12 +8,18 @@ const User = "User";
 const MembershipSchema = new Schema({
   owner: {
     type: Schema.Types.ObjectId,
-    index: true,
     ref: User,
+    index: true,
   },
   plan: {
     type: Schema.Types.ObjectId,
     ref: Plan,
+    index: true,
+  },
+  bill: {
+    type: Schema.Types.ObjectId,
+    ref: Bill,
+    index: true,
   },
   start: {
     type: Date,
@@ -26,17 +32,12 @@ const MembershipSchema = new Schema({
   status: {
     type: String,
     default: "active",
-    enum: ["active", "inactive", "expired"],
+    enum: ["active", "inactive", "cancelled", "expired"],
     index: true,
   },
   canCancel: {
     type: Boolean,
     default: false,
-    index: true,
-  },
-  bill: {
-    type: Schema.Types.ObjectId,
-    ref: Bill,
     index: true,
   },
 });

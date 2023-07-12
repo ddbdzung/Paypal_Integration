@@ -81,55 +81,36 @@
     <div style="">
       <a href="/" style="display: inline-block; padding: 4px;">Back</a>
     </div>
+    <div style="">
+      <a href="/webhooks/initialize" style="display: inline-block; padding: 4px;">Initialize</a>
+    </div>
   </div>
   <div class="container">
 
     <div class="table" style="position: relative;">
       <div style="position: absolute; left: 40%; bottom: 100%;">
-        <h1>Memberships</h1>
+        <h1>Webhooks</h1>
       </div>
       <div class="table-header">
         <div class="header__item"><a id="name" class="filter__link" href="#">-</a></div>
-        <div class="header__item"><a id="total" class="filter__link filter__link--number" href="#">Plan</a></div>
-        <div class="header__item"><a id="losses" class="filter__link filter__link--number" href="#">Owner</a></div>
-        <div class="header__item"><a id="total" class="filter__link filter__link--number" href="#">Price</a></div>
-        <div class="header__item"><a id="total" class="filter__link filter__link--number" href="#">Start</a></div>
-        <div class="header__item"><a id="total" class="filter__link filter__link--number" href="#">Finish</a></div>
-        <div class="header__item"><a id="total" class="filter__link filter__link--number" href="#">Status</a></div>
+        <div class="header__item"><a id="total" class="filter__link filter__link--number" href="#">Type</a></div>
+        <div class="header__item"><a id="losses" class="filter__link filter__link--number" href="#">Listener</a></div>
         <div class="header__item"><a id="total" class="filter__link filter__link--number" href="#">Action</a></div>
       </div>
 
       <div class="table-content">
-        <% memberships.forEach((membership, idx)=> { %>
+        <% paypalWebhooks.forEach((event, idx)=> { %>
           <div class="table-row">
             <div class="table-data">
               <%= idx + 1 %>
             </div>
             <div class="table-data">
-              <%= membership.plan?.title %>
+              <%= event.type %>
             </div>
             <div class="table-data">
-              <%= membership.owner?.email %>
+              <%= event.listener %>
             </div>
-            <div class="table-data">
-              <%= membership.plan?.price %>
-            </div>
-            <div class="table-data">
-              <%= membership.start %>
-            </div>
-            <div class="table-data">
-              <%= membership.finish %>
-            </div>
-            <div class="table-data">
-              <%= membership.status %>
-            </div>
-            <div class="table-data">
-              <a href="http://127.0.0.1:3000/subscription/unsubscribe/<%= membership._id %>">
-                <button>
-                  Unsubscribe
-                </button>
-              </a>
-            </div>
+            <div class="table-data"></div>
           </div>
           <%})%>
       </div>
@@ -203,5 +184,9 @@
       });
 
     });
+
+
+
+
 
   

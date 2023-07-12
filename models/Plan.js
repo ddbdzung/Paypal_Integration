@@ -4,6 +4,7 @@ const { PAYPAL_TENURE_TYPE, PAYPAL_CURRENCY, PAYPAL_INTERVAL_UNIT, PAYPAL_STATUS
 const PlanSchema = mongoose.Schema({
   paypalPlanId: {
     type: String,
+    index: true,
   },
   title: {
     type: String,
@@ -34,16 +35,18 @@ const PlanSchema = mongoose.Schema({
     min: 1,
     max: 365,
     validate: {
-      validator: function (value) { return Number.isInteger(value) },
-      message: '{VALUE} is not an integer value'
-    }
+      validator: function (value) {
+        return Number.isInteger(value);
+      },
+      message: "{VALUE} is not an integer value",
+    },
   },
   tenureType: {
     type: String,
     enum: Object.values(PAYPAL_TENURE_TYPE),
     default: PAYPAL_TENURE_TYPE.REGULAR,
-  }
-})
+  },
+});
 
 const Plan = mongoose.model('Plan', PlanSchema)
 module.exports = Plan

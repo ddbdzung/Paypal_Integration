@@ -70,3 +70,63 @@ exports.createPlan = async (planDocument) => {
   const result = await _paypalCreatePlan(prePaypalPlan)
   return result
 }
+
+exports.createHookEvent = async (urlListener, eventTypes) => {
+  const url = "https://api-m.sandbox.paypal.com/v1/notifications/webhooks";
+  const bodyData = {
+    url: urlListener,
+    event_types: eventTypes,
+  };
+  console.log("bodyData", bodyData);
+  const configs = {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    auth: {
+      username: process.env.PAYPAL_CLIENT_ID,
+      password: process.env.PAYPAL_CLIENT_SECRET,
+    },
+  };
+  try {
+    const { data } = await axios({
+      url,
+      data: bodyData,
+      ...configs,
+    });
+
+    return data;
+  } catch (error) {
+    console.log(error.response.data);
+    if (error.response.data?.name === "WEBHOOK_URL_ALREADY_EXISTS") {
+      throw new Error(error.response.data?.message);
+    }
+
+    throw error;
+  }
+};
+
+exports.cancelSubscription = async (subscriptionId) => {
+  const url = `https://api-m.sandbox.paypal.com/v1/billing/subscriptions/${subscriptionId}/cancel`;
+  const configs = {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    auth: {
+      username: process.env.PAYPAL_CLIENT_ID,
+      password: process.env.PAYPAL_CLIENT_SECRET,
+    },
+  };
+  try {
+    const { data } = await axios({
+      url,
+      ...configs,
+    });
+
+    return data;
+  } catch (error) {
+    console.log(error.response.data);
+    throw error;
+  }
+};

@@ -104,7 +104,9 @@
           <div class="table-data"><%= plan.status %></div>
           <div class="table-data"><%= plan.tenureType %></div>
           <div class="table-data"><%= `${plan.durationAmount} ${plan.durationUnit}` %></div>
-          <div class="table-data"><a href="http://127.0.0.1:3000/subscription/checkout?planId=<%= plan.paypalPlanId%>"><button>Checkout</button></a></div>
+          <div class="table-data"><a
+              href="http://127.0.0.1:3000/subscription/checkout?planId=<%= plan.paypalPlanId%>"><button>Subscribe</button></a>
+          </div>
         </div>
         <%})%>
       </div>	

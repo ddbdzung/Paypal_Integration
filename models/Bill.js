@@ -1,4 +1,5 @@
 const Mongoose = require("mongoose");
+const { BILL_STATUS } = require("../constants/bill");
 const { Schema } = Mongoose;
 const User = "User";
 const Plan = "Plan";
@@ -14,6 +15,18 @@ const BillSchema = new Schema({
     type: Schema.Types.ObjectId,
     ref: Plan,
     required: true,
+  },
+  paypalSubscriptionId: {
+    type: String,
+    index: true,
+  },
+  paypalPlanId: {
+    type: String,
+    index: true,
+  },
+  paypalExtend: {
+    type: Schema.Types.Mixed,
+    default: {},
   },
   coupon: {
     type: String,
@@ -43,7 +56,8 @@ const BillSchema = new Schema({
     index: true,
     type: String,
     trim: true,
-    default: "pending",
+    enum: Object.values(BILL_STATUS),
+    default: BILL_STATUS.PENDING,
   },
   method: {
     type: String,
