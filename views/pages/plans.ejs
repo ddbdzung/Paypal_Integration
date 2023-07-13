@@ -104,14 +104,32 @@
           <div class="table-data"><%= plan.status %></div>
           <div class="table-data"><%= plan.tenureType %></div>
           <div class="table-data"><%= `${plan.durationAmount} ${plan.durationUnit}` %></div>
-          <div class="table-data"><a
-              href="http://127.0.0.1:3000/subscription/checkout?planId=<%= plan.paypalPlanId%>"><button>Subscribe</button></a>
+          <div class="table-data">
+            <button data-plan-id="<%= plan.paypalPlanId %>" onClick="subscribe()">Subscribe</button>
+            <a id="href[<%= plan.paypalPlanId %>]" href="/subscription/checkout?planId=<%= plan.paypalPlanId %>"></a>
           </div>
         </div>
         <%})%>
       </div>	
     </div>
   </div>
+<script>
+  async function subscribe() {
+    const planId = event.target.dataset.planId
+    const url = `/subscription/checkout/verify?planId=${planId}`
+    const response = await fetch(url)
+
+    const data = await response.json()
+    if (!data.success) {
+      alert(data?.message);
+      return;
+    }
+
+    const aElement = document.getElementById(`href[${planId}]`)
+    aElement.click()
+  }
+</script>
+
   <script>
     var properties = [
 	'Plan\'s name',

@@ -340,7 +340,10 @@ app.post("/api/v1/paypal/webhook/subscription", async (req, res) => {
           pSavedBill,
           pMembership,
         ]);
-        console.log({ savedBill, membership });
+
+        user.membership = membership._id;
+        const savedUser = await user.save();
+        console.log({ savedUser, savedBill, membership });
       } catch (error) {
         console.log(error);
         return res.status(500).json({ success: false, error: error.message });
@@ -429,7 +432,7 @@ app.post(
   authUser('admin'),
   async (req, res) => {
     const webhookEvents = await PaypalWebhook.find({}).lean();
-    if (webhookEvents.length === 0 || !webhookEvents.includes(PAYPAL_EVENT_PLAN.BILLING_PLAN_CREATED)) {
+    if (webhookEvents.length === 0 || !webhookEvents.map(i => i.type).includes(PAYPAL_EVENT_PLAN.BILLING_PLAN_CREATED)) {
       return res.status(400).json({
         success: false,
         message: "Please create webhook for billing plan created event",
@@ -484,7 +487,7 @@ app.post(
   }
 );
 
-app.get("/subscription/checkout", authUser(['user', 'admin']), async (req, res) => {
+app.get('/subscription/checkout/verify', authUser(['user', 'admin']), async (req, res) => {
   const planIds = (await Plan.find({}, "paypalPlanId")).map(
     (plan) => plan.paypalPlanId
   );
@@ -493,6 +496,43 @@ app.get("/subscription/checkout", authUser(['user', 'admin']), async (req, res) 
     return res.status(404).send("Plan not found");
   }
 
+  const user = await User.findById(req.user._id).lean()
+
+  if (user.membership) {
+    const membership = await Membership.findById(user.membership);
+    if (membership.status === "active") {
+      return res.status(400).json({
+        success: false,
+        message: "You already have an active membership",
+      });
+    }
+  }
+
+  res.cookie('user', {
+    roles: req.user.roles,
+    email: req.user.email,
+    _id: req.user._id,
+    metadata: {
+      isVerifiedToCheckout: true,
+    }
+  })
+
+  return res.status(200).json({
+    success: true,
+  })
+})
+
+app.get("/subscription/checkout", authUser(['user', 'admin']), async (req, res) => {
+  const { planId } = req.query
+  const isVerifiedToCheckout = req.user?.metadata?.isVerifiedToCheckout
+  if (!isVerifiedToCheckout) {
+    return res.status(403).json({
+      success: false,
+      message: "You are not allowed to checkout",
+    });
+  }
+
+  res.cookie('user', { roles: req.user.roles, email: req.user.email, _id: req.user._id })
   res.render("pages/checkout", {
     isAuth: !!req.user,
     planId,
@@ -517,6 +557,8 @@ app.get(
         });
       }
 
+      console.log('membership.owner._id', membership.owner._id)
+      console.log('_id', _id)
       if (membership.owner._id.toString() !== _id.toString()) {
         return res.status(403).json({
           success: false,
@@ -580,16 +622,6 @@ app.post("/subscription/checkout/:planId", authUser(['admin', 'user']), async (r
     });
   }
 
-  if (user.membership) {
-    const membership = await Membership.findById(user.membership);
-    if (membership.status === "active") {
-      return res.status(400).json({
-        success: false,
-        message: "You already have an active membership",
-      });
-    }
-  }
-
   const createdBill = await Bill.create({
     owner: user._id,
     plan: plan._id,
@@ -607,7 +639,7 @@ app.post("/subscription/checkout/:planId", authUser(['admin', 'user']), async (r
 
 app.get("/bills", authUser(['admin', 'user']), async (req, res) => {
   const bills = await Bill.find({ owner: req.user._id })
-    .populate("plan")
+    .populate(["plan", "owner"])
     .lean();
   res.render("pages/bills", {
     isAuth: !!req.user,
@@ -616,7 +648,8 @@ app.get("/bills", authUser(['admin', 'user']), async (req, res) => {
 });
 
 app.get("/memberships", authUser(['admin', 'user']), async (req, res) => {
-  const memberships = await Membership.find({ owner: req.user._id })
+  const query = (req.user.roles.includes('admin')) ? {} : { owner: req.user._id }
+  const memberships = await Membership.find(query)
     .populate(["plan", "owner"])
     .lean();
 

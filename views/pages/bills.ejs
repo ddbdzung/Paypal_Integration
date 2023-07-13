@@ -82,10 +82,13 @@
       </div>
       <div class="table-header">
         <div class="header__item"><a id="name" class="filter__link" href="#">-</a></div>
+        <div class="header__item"><a id="losses" class="filter__link filter__link--number" href="#">User</a></div>
         <div class="header__item"><a id="losses" class="filter__link filter__link--number" href="#">Plan</a></div>
         <div class="header__item"><a id="total" class="filter__link filter__link--number" href="#">Price</a></div>
         <div class="header__item"><a id="total" class="filter__link filter__link--number" href="#">Currency</a></div>
         <div class="header__item"><a id="total" class="filter__link filter__link--number" href="#">Status</a></div>
+        <div class="header__item"><a id="total" class="filter__link filter__link--number" href="#">Created</a></div>
+        <div class="header__item"><a id="total" class="filter__link filter__link--number" href="#">Updated</a></div>
         <div class="header__item"><a id="total" class="filter__link filter__link--number" href="#">Action</a></div>
       </div>
       
@@ -93,10 +96,13 @@
         <% bills.forEach((bill, idx)=> { %>
         <div class="table-row">
           <div class="table-data"><%= idx + 1 %></div>
+          <div class="table-data"><%= bill.owner?.email %></div>
           <div class="table-data"><%= bill.plan?.title %></div>
           <div class="table-data"><%= bill.price %></div>
           <div class="table-data"><%= bill.currency %></div>
           <div class="table-data"><%= bill.status %></div>
+          <div class="table-data"><%= bill.createdAt %></div>
+          <div class="table-data"><%= bill.updatedAt %></div>
           <div class="table-data"></div>
         </div>
         <%})%>

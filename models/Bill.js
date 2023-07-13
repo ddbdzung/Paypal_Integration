@@ -71,10 +71,8 @@ const BillSchema = new Schema({
   updated: {
     type: Date,
   },
-  created: {
-    type: Date,
-    default: Date.now,
-  },
+}, {
+  timestamps: true,
 });
 
 BillSchema.index({ "extend.txn_id": 1 });

@@ -6,6 +6,7 @@
 <div id="paypal-button-container"></div>
 
 <script>
+  const domain = window.location.origin;
   paypal.Buttons({
     createSubscription: function (data, actions) {
      return actions.subscription.create({
@@ -18,7 +19,7 @@
       // fetch api with post method and data
       try {
         const result = await fetch(
-          `http://127.0.0.1:3000/subscription/checkout/<%= planId %>`,
+          `${domain}/subscription/checkout/<%= planId %>`,
           {
             method: 'POST',
             headers: {
@@ -32,7 +33,7 @@
         const details = await result.json();
         console.log('details', details)
         alert('Done')
-        window.location.href = '/memberships'
+        window.location.href = '/'
       } catch (err) {
         console.error(err)
         alert('Error')
