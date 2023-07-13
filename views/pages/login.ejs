@@ -1,0 +1,50 @@
+<%- include('../partials/head') %>
+  <%- include('../partials/header') %>
+
+    <div class="container">
+      <h1>Login</h1>
+      <form>
+        <div class="form-group my-2">
+          <label for="email">Email address</label>
+          <input type="email" id="email" placeholder="Enter email" class="form-control" required>
+        </div>
+        <div class="form-group my-2">
+          <label for="password">Password</label>
+          <input type="password" id="password" placeholder="Password" class="form-control" required>
+        </div>
+        <button id="submit-btn" type="button" class="btn btn-primary">Login</button>
+      </form>
+    </div>
+
+    <script>
+      const email = document.getElementById('email');
+      const password = document.getElementById('password');
+      const btn = document.getElementById('submit-btn');
+
+      btn.addEventListener('click', async () => {
+        let domain = window.location.origin;
+        try {
+          const result = await fetch(`${domain}/login`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              email: email.value,
+              password: password.value
+            })
+          })
+          const details = await result.json();
+          if (!details.success) {
+            alert('Wrong email or password')
+          } else {
+            window.location.href = '/'
+          }
+        } catch (err) {
+          console.error(err)
+          alert('Error')
+        }
+      })
+    </script>
+
+    <%- include('../partials/footer') %>

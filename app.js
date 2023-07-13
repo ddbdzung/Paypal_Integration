@@ -44,22 +44,93 @@ app.use(
 connectDb();
 
 app.get("/login", async (req, res) => {
-  const defaultEmail = "test@example.com";
-  let user = await User.findOne({ email: defaultEmail });
-  if (!user) {
-    console.log("created default user");
-    user = await User.create({});
-  }
-  // Sign a cookie
-  res.cookie("user", { _id: user._id, roles: user.roles, email: user.email });
-
-  res.redirect("/");
+  res.render("pages/login", {
+    title: 'Paypal Demo',
+    isAuth: false,
+  });
 });
 
-const authUser = () => (req, res, next) => {
+app.post('/login', async (req, res) => {
+  const { email, password } = req.body;
+  try {
+    const user = await User.findOne({ email });
+    if (!user || user.password !== password) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid email or password'
+      })
+    }
+
+    res.cookie("user", { _id: user._id, roles: user.roles, email: user.email });
+    return res.status(200).json({
+      success: true,
+      message: 'Login successfully'
+    })
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message
+    })
+  }
+})
+
+app.get('/register', (req, res) => {
+  res.render('pages/register', {
+    title: 'Paypal Demo',
+    isAuth: false,
+  })
+})
+
+app.post('/register', async (req, res) => {
+  const { email, password, role } = req.body;
+  try {
+    const isUserExist = await User.findOne({ email });
+    if (isUserExist) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email already exist'
+      })
+    }
+    const user = await User.create({ email, password, roles: [role] });
+
+    res.cookie("user", { _id: user._id, roles: user.roles, email: user.email });
+    return res.status(201).json({
+      success: true,
+      message: 'Register successfully'
+    })
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    })
+  }
+})
+
+/**
+ * 
+ * @param {string | string[]} roleRequired 'user' | 'admin
+ * @returns 
+ */
+const authUser = (requiredRoles) => (req, res, next) => {
   const { user } = req.cookies;
   if (!user) {
-    return res.redirect("/");
+    return res.status(401).json({
+      success: false,
+      message: 'Unauthorized'
+    })
+  }
+
+  if (!requiredRoles || (Array.isArray(requiredRoles) && requiredRoles.length === 0)) {
+    throw new Error('Must have at least one role required for this middleware')
+  }
+
+  const authorizedRequestRoles = Array.isArray(requiredRoles) ? requiredRoles : [requiredRoles];
+  const roles = Array.isArray(user.roles) ? user.roles : [user.roles];
+  if (!authorizedRequestRoles.some(role => roles.includes(role))) {
+    return res.status(403).json({
+      success: false,
+      message: 'Forbidden'
+    })
   }
 
   req.user = user;
@@ -70,10 +141,11 @@ app.get("/", (req, res) => {
   res.render("pages/index", {
     isAuth: !!req.cookies.user,
     title: "Paypal Demo",
+    user: req.cookies.user,
   });
 });
 
-app.get("/subscription/plans", authUser(), async (req, res) => {
+app.get("/subscription/plans", async (req, res) => {
   const plans = await Plan.find({});
   res.render("pages/plans", {
     plans,
@@ -144,7 +216,6 @@ app.post("/api/v1/paypal/webhook/update-event/:eventId", async (req, res) => {
       value: eventTypes,
     },
   ];
-  console.log("🚀 ~ file: app.js:127 ~ app.post ~ bodyData:", bodyData);
   const configs = {
     method: "PATCH",
     headers: {
@@ -179,7 +250,7 @@ app.post("/api/v1/paypal/webhook/create-event", async (req, res) => {
   }
 });
 
-app.get("/webhooks", authUser(), async (req, res) => {
+app.get("/webhooks", authUser('admin'), async (req, res) => {
   const paypalWebhooks = await PaypalWebhook.find({});
   res.render("pages/webhooks", {
     isAuth: !!req.user,
@@ -187,7 +258,7 @@ app.get("/webhooks", authUser(), async (req, res) => {
   });
 });
 
-app.get("/webhooks/initialize", authUser(), async (req, res) => {
+app.get("/api/v1/paypal/webhooks/initialize", authUser('admin'), async (req, res) => {
   const paypalWebhooks = await PaypalWebhook.find({});
   let protocol = req.protocol;
   if (protocol !== "https") {
@@ -215,10 +286,9 @@ app.get("/webhooks/initialize", authUser(), async (req, res) => {
         listener: url,
       }));
 
-      const savedWebhook = await PaypalWebhook.create(documents);
+      await PaypalWebhook.create(documents);
       return res.status(200).json({
         success: true,
-        data: savedWebhook,
       });
     } catch (err) {
       return res.status(500).json({ success: false, error: err.message });
@@ -335,7 +405,15 @@ app.post("/api/v1/paypal/webhook/subscription", async (req, res) => {
   });
 });
 
-app.get("/subscription/plans/new", authUser(), async (req, res) => {
+app.get("/subscription/plans/new", authUser(['admin']), async (req, res) => {
+  const webhookEvents = await PaypalWebhook.find({}).lean();
+  if (webhookEvents.length === 0 || !webhookEvents.map(i => i.type).includes(PAYPAL_EVENT_PLAN.BILLING_PLAN_CREATED)) {
+    return res.status(400).json({
+      success: false,
+      message: "Please create webhook for billing plan created event",
+    });
+  }
+
   res.render("pages/create-plan", {
     isAuth: !!req.user,
     currencies: PAYPAL_CURRENCY,
@@ -348,7 +426,16 @@ app.get("/subscription/plans/new", authUser(), async (req, res) => {
 app.post(
   "/api/v1/subscription/plans/new",
   validate(planValidation.createPlan),
+  authUser('admin'),
   async (req, res) => {
+    const webhookEvents = await PaypalWebhook.find({}).lean();
+    if (webhookEvents.length === 0 || !webhookEvents.includes(PAYPAL_EVENT_PLAN.BILLING_PLAN_CREATED)) {
+      return res.status(400).json({
+        success: false,
+        message: "Please create webhook for billing plan created event",
+      });
+    }
+
     const rawPlan = pick(req.body, [
       "title",
       "description",
@@ -397,7 +484,7 @@ app.post(
   }
 );
 
-app.get("/subscription/checkout", authUser(), async (req, res) => {
+app.get("/subscription/checkout", authUser(['user', 'admin']), async (req, res) => {
   const planIds = (await Plan.find({}, "paypalPlanId")).map(
     (plan) => plan.paypalPlanId
   );
@@ -415,7 +502,7 @@ app.get("/subscription/checkout", authUser(), async (req, res) => {
 
 app.get(
   "/subscription/unsubscribe/:membershipId",
-  authUser(),
+  authUser(['user', 'admin']),
   async (req, res) => {
     const { membershipId } = req.params;
     const { _id } = req.user;
@@ -472,9 +559,9 @@ app.get(
   }
 );
 
-app.post("/subscription/checkout/:planId", authUser(), async (req, res) => {
+app.post("/subscription/checkout/:planId", authUser(['admin', 'user']), async (req, res) => {
   const { planId } = req.params;
-  const { email, _id, roles } = req.user;
+  const { _id } = req.user;
   const { subscriptionID } = req.body;
 
   if (!planId) {
@@ -493,6 +580,16 @@ app.post("/subscription/checkout/:planId", authUser(), async (req, res) => {
     });
   }
 
+  if (user.membership) {
+    const membership = await Membership.findById(user.membership);
+    if (membership.status === "active") {
+      return res.status(400).json({
+        success: false,
+        message: "You already have an active membership",
+      });
+    }
+  }
+
   const createdBill = await Bill.create({
     owner: user._id,
     plan: plan._id,
@@ -508,7 +605,7 @@ app.post("/subscription/checkout/:planId", authUser(), async (req, res) => {
   });
 });
 
-app.get("/bills", authUser(), async (req, res) => {
+app.get("/bills", authUser(['admin', 'user']), async (req, res) => {
   const bills = await Bill.find({ owner: req.user._id })
     .populate("plan")
     .lean();
@@ -518,7 +615,7 @@ app.get("/bills", authUser(), async (req, res) => {
   });
 });
 
-app.get("/memberships", authUser(), async (req, res) => {
+app.get("/memberships", authUser(['admin', 'user']), async (req, res) => {
   const memberships = await Membership.find({ owner: req.user._id })
     .populate(["plan", "owner"])
     .lean();

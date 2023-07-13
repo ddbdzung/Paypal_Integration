@@ -11,13 +11,6 @@ const UserSchema = new Schema({
     index: true,
   },
 
-  referral_id: {
-    type: String,
-    index: true,
-    // unique: true,
-    default: null,
-  },
-
   roles: {
     type: [
       {
@@ -43,19 +36,6 @@ const UserSchema = new Schema({
   password: String,
   passwordResetToken: String,
   passwordResetExpires: Date,
-
-  affiliateCode: {
-    type: String,
-    index: true,
-    unique: true,
-    trim: true,
-  },
-
-  affiliateRefCode: {
-    type: String,
-    index: true,
-    trim: true,
-  },
 
   profile: {
     type: Schema.Types.Mixed,

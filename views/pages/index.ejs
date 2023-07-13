@@ -3,8 +3,12 @@
 
 <div class="container">
     <h1>Hi there!</h1>
-    <h2>Welcome to my Blog</h2>
+    <% if (!isAuth) { %>
+        <p>You are not logged in.</p>
+    <% } else { %>
+        <h2>Email: <%= user?.email %></h2>
+        <h2>Role: <%= user?.roles.join(',') %></h2>
+    <% } %>
 </div>
-
 
 <%- include('../partials/footer') %>

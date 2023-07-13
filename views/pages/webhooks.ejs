@@ -78,11 +78,13 @@
     }
   </style>
   <div style="display: flex; flex-direction: row-reverse; padding-right: 4rem; padding-top: 4rem;">
-    <div style="">
-      <a href="/" style="display: inline-block; padding: 4px;">Back</a>
+    <div style="margin-left: 4px;">
+      <button class="btn btn-warning">
+        <a href="/" style="display: inline-block;">Back</a>
+      </button>
     </div>
-    <div style="">
-      <a href="/webhooks/initialize" style="display: inline-block; padding: 4px;">Initialize</a>
+    <div style="margin-right: 4px;">
+      <button onClick="initializeWebhook()" class="btn btn-primary">Initialize</button>
     </div>
   </div>
   <div class="container">
@@ -116,6 +118,47 @@
       </div>
     </div>
   </div>
+<script>
+  function initializeWebhook() {
+    const isHttpsProtocol = window.location.protocol === 'https:'
+    if (!isHttpsProtocol) {
+      alert('Webhook initialization failed. Please use https protocol')
+      return
+    }
+
+    const { data } = fetch('/api/v1/paypal/webhooks/initialize', {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+    })
+      .then(res => {
+        if (res.status === 204) {
+          alert('Webhook maybe already initialized')
+          return null
+        }
+
+        return res.json()
+      })
+      .then(result => {
+        if (!result) {
+          return null
+        }
+
+        if (result?.success) {
+          alert('Webhook initialized successfully')
+        } else {
+          console.log(result?.error)
+          alert('Webhook initialization failed')
+        }
+      })
+      .catch(err => {
+        console.error(err)
+        alert('Webhook initialization failed')
+      })
+  }
+</script>
+
   <script>
     var properties = [
       'Plan\'s name',
